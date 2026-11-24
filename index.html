@@ -1,1 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DART - Sketchbook</title>
+  <meta name="theme-color" content="#ffffff">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  
+  <link rel="icon" type="image/svg+xml" href="https://dctrart.com/assets/logo/dartlogotitle.svg?v=2">
+  <link rel="apple-touch-icon" href="https://dctrart.com/assets/logo/dartlogotitle.svg?v=2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
+    html, body {
+      width: 100%;
+      height: 100dvh;
+      background-color: #ffffff;
+      color: #121212;
+      font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    /* ÜST DEFTER SPİRALİ */
+    .spiral-binding {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 40px;
+      z-index: 20;
+      pointer-events: none;
+      background-repeat: repeat-x;
+      background-position: left top;
+      background-size: 46px 40px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='40' viewBox='0 0 46 40'%3E%3Crect x='0' y='0' width='46' height='3' fill='%232b2b2b'/%3E%3Crect x='15' y='21' width='16' height='11' rx='2' fill='%239a9a9a'/%3E%3Crect x='16.5' y='22.5' width='13' height='8' rx='1.5' fill='%23787878'/%3E%3Crect x='18' y='0' width='3.2' height='27' rx='1.6' fill='%23b5b5b5'/%3E%3Crect x='24.8' y='0' width='3.2' height='27' rx='1.6' fill='%239e9e9e'/%3E%3C/svg%3E");
+    }
+
+    /* ARKA PLAN DÜĞÜM AĞI (CANVAS) */
+    #networkCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      display: block;
+    }
+
+    /* MERKEZ LOGO VE BAŞLIK */
+    .sketchbook-stage {
+      position: relative;
+      width: 100%;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      padding: 40px 20px 20px 20px;
+      pointer-events: none;
+    }
+
+    .brand-link {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-decoration: none;
+      color: #121212;
+      pointer-events: auto;
+      transition: transform 0.3s ease;
+    }
+
+    .brand-link:hover {
+      transform: scale(1.015);
+    }
+
+    .sketch-logo {
+      width: clamp(210px, 25vw, 320px);
+      height: auto;
+      display: block;
+    }
+
+    .sketch-title {
+      margin-top: 6px;
+      font-size: clamp(20px, 2.3vw, 29px);
+      font-weight: 700;
+      letter-spacing: 0.015em;
+      color: #121212;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    /* MOBİL DÜZENLEME */
+    @media (max-width: 768px) {
+      .spiral-binding {
+        height: 34px;
+        background-size: 38px 34px;
+      }
+
+      .sketch-logo {
+        width: 210px;
+      }
+
+      .sketch-title {
+        font-size: 20px;
+        margin-top: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Üst Spiral Şerit -->
+  <div class="spiral-binding" aria-hidden="true"></div>
+
+  <!-- Düğüm Ağı Arka Planı -->
+  <canvas id="networkCanvas"></canvas>
+
+  <!-- Merkez Logo ve Başlık -->
+  <main class="sketchbook-stage">
+    <a href="https://dctrart.com" class="brand-link" title="Back to DART Architecture">
+      <img src="https://dctrart.com/assets/logo/dartlogoblack.svg" alt="DART Logo" class="sketch-logo">
+      <h1 class="sketch-title">DART - Sketchbook</h1>
+    </a>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('networkCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let width, height, centerX, centerY, clusterRadius;
+    let nodes = [];
+    const mouse = { x: null, y: null };
+
+    const NODE_COUNT = 52;
+    const GREY_PALETTE = [
+      'rgba(95, 95, 95, 0.85)',
+      'rgba(120, 120, 120, 0.75)',
+      'rgba(155, 155, 155, 0.6)',
+      'rgba(185, 185, 185, 0.45)',
+      'rgba(215, 215, 215, 0.35)'
+    ];
+
+    function initNetwork() {
+      const dpr = window.devicePixelRatio || 1;
+      width = window.innerWidth;
+      height = window.innerHeight;
+
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      ctx.scale(dpr, dpr);
+
+      centerX = width / 2;
+      centerY = height / 2 + 10;
+      clusterRadius = Math.min(width, height) * 0.34;
+
+      nodes = [];
+      for (let i = 0; i < NODE_COUNT; i++) {
+        // Merkeze daha yoğun, dışa doğru seyrelen dairesel dağılım
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.pow(Math.random(), 0.72) * clusterRadius;
+        const baseX = centerX + Math.cos(angle) * dist;
+        const baseY = centerY + Math.sin(angle) * dist;
+
+        nodes.push({
+          baseX,
+          baseY,
+          x: baseX,
+          y: baseY,
+          radius: 4.5 + Math.random() * 4.5,
+          color: GREY_PALETTE[Math.floor(Math.random() * GREY_PALETTE.length)],
+          phaseX: Math.random() * Math.PI * 2,
+          phaseY: Math.random() * Math.PI * 2,
+          speed: 0.004 + Math.random() * 0.005,
+          drift: 4 + Math.random() * 7
+        });
+      }
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, width, height);
+
+      // Düğümlerin hafif salınım konumlarını güncelle
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        n.phaseX += n.speed;
+        n.phaseY += n.speed * 0.9;
+
+        let targetX = n.baseX + Math.cos(n.phaseX) * n.drift;
+        let targetY = n.baseY + Math.sin(n.phaseY) * n.drift;
+
+        // Fare yaklaştığında hafif itme/etkileşim
+        if (mouse.x !== null && mouse.y !== null) {
+          const dx = targetX - mouse.x;
+          const dy = targetY - mouse.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 120 && dist > 0) {
+            const force = (120 - dist) / 120;
+            targetX += (dx / dist) * force * 14;
+            targetY += (dy / dist) * force * 14;
+          }
+        }
+
+        n.x += (targetX - n.x) * 0.08;
+        n.y += (targetY - n.y) * 0.08;
+      }
+
+      // Bağlantı çizgilerini çiz
+      const maxLinkDist = clusterRadius * 0.56;
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const dist = Math.hypot(dx, dy);
+
+          if (dist < maxLinkDist) {
+            const opacity = (1 - dist / maxLinkDist) * 0.48;
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.strokeStyle = `rgba(115, 115, 115, ${opacity.toFixed(3)})`;
+            ctx.lineWidth = 1.6;
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Düğüm noktalarını çiz
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+        ctx.fillStyle = n.color;
+        ctx.fill();
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', initNetwork);
+    window.addEventListener('mousemove', (e) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+    });
+    window.addEventListener('mouseleave', () => {
+      mouse.x = null;
+      mouse.y = null;
+    });
+
+    initNetwork();
+    animate();
+  </script>
+
+</body>
+</html>
